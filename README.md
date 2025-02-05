@@ -52,8 +52,8 @@ The MLP predicts the probability of a functional association between a protein a
 ## Repository Structure
 - **data/**: Contains the knowledge graph data required for training and evaluating ProtHGT.  
 Data files can be downloaded from [Google Drive](https://drive.google.com/drive/u/0/folders/1VcMcayVnBD82F7xcUzLFNzlEixRSoFSu) and must be placed in this directory for `train.py` and `predict.py` to function properly.
-- **models/**: Contains trained models for each Gene Ontology (GO) category. These models are trained on knowledge graph (KG) datasets using TAPE embeddings as the initial protein representation.
-- **configs/**: Stores configuration files with optimized model parameters and training settings. The hyperparameters are optimized for KG datasets where TAPE embeddings are used as the initial protein representation.
+- **models/**: Contains trained models for each Gene Ontology (GO) category. These models are trained on knowledge graph (KG) datasets using TAPE embeddings as the initial protein representation. The models trained on alternative protein representations will be available soon.
+- **configs/**: Stores configuration files with optimized model parameters and training settings. The hyperparameters are optimized for KG datasets where TAPE embeddings are used as the initial protein representation. The configuration files for alternative protein representations will be available soon.
 - **src/**: Main source code directory
   - `model.py`: Implementation of the ProtHGT architecture
   - `train.py`: Script for training the model
