@@ -1,0 +1,17 @@
+{
+  "lr": 0.005,
+  "wd": 0,
+  "epochs": 100,
+  "tr_batch_size": 512,
+  "hidden_channels": [32, [64, 32, 16, 8, 1]],
+  "num_heads": 2,                                                                 
+  "num_layers": 2,
+  "num_neighbors": [32],
+  
+  "mlp_dropout" : 0.4,
+  "mlp_lr": 0.01,
+  "mlp_wd": 0.00001,
+
+  "neg_sample_ratio": 100,
+  "pos_weight": 100,
+  }
