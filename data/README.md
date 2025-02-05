@@ -15,5 +15,4 @@ You can download the ProtHGT knowledge graph data files from this [Google Drive 
 
 ## Usage
 
-Once downloaded, place the files inside this `data/` directory so that `train.py` can access them.
-
+Once downloaded, place the files inside this `data/` directory so that `train.py` and `predict.py` can access them.
