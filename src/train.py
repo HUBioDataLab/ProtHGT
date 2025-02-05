@@ -19,21 +19,19 @@ from utils import metrics
 def parse_args():
     parser = argparse.ArgumentParser(description='Train ProtHGT model for protein function prediction')
     parser.add_argument('--train-data', type=str, 
-                       default='./data/prothgt-train-graph.pt',
+                       default='../data/prothgt-train-graph.pt',
                        help='Path to training data')
     parser.add_argument('--val-data', type=str, 
-                       default='./data/prothgt-val-graph.pt',
+                       default='../data/prothgt-val-graph.pt',
                        help='Path to validation data')
     parser.add_argument('--test-data', type=str, 
-                       default='./data/prothgt-test-graph.pt',
+                       default='../data/prothgt-test-graph.pt',
                        help='Path to test data')
     parser.add_argument('--target-type', type=str, required=True, help='Target prediction type')
-    parser.add_argument('--config', type=str, default=None, help='Path to config file')
-    parser.add_argument('--output-dir', type=str, default='./outputs', help='Output directory')
+    parser.add_argument('--config', type=str, required=True, help='Path to config file')
+    parser.add_argument('--output-dir', type=str, default='../outputs', help='Output directory')
     parser.add_argument('--checkpoint-dir', type=str, default=None, help='Checkpoint directory')
     parser.add_argument('--num-workers', type=int, default=2, help='Number of data loading workers')
-    parser.add_argument('--disjoint-ratio', type=float, default=0.3, 
-                       help='Disjoint train ratio for link split')
     return parser.parse_args()
 
 def load_config(config_path):
@@ -302,7 +300,6 @@ def main():
         args.val_data, 
         args.test_data,
         args.target_type,
-        args.disjoint_ratio
     )
 
     # Print dataset statistics
