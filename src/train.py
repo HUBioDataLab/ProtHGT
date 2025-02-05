@@ -18,9 +18,15 @@ from utils import metrics
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train ProtHGT model for protein function prediction')
-    parser.add_argument('--train-data', type=str, required=True, help='Path to training data')
-    parser.add_argument('--val-data', type=str, required=True, help='Path to validation data')
-    parser.add_argument('--test-data', type=str, required=True, help='Path to test data')
+    parser.add_argument('--train-data', type=str, 
+                       default='./data/prothgt-train-graph.pt',
+                       help='Path to training data')
+    parser.add_argument('--val-data', type=str, 
+                       default='./data/prothgt-val-graph.pt',
+                       help='Path to validation data')
+    parser.add_argument('--test-data', type=str, 
+                       default='./data/prothgt-test-graph.pt',
+                       help='Path to test data')
     parser.add_argument('--target-type', type=str, required=True, help='Target prediction type')
     parser.add_argument('--config', type=str, default=None, help='Path to config file')
     parser.add_argument('--output-dir', type=str, default='./outputs', help='Output directory')
