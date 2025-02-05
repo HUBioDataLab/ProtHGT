@@ -19,10 +19,10 @@ You can download the ProtHGT knowledge graph data files from this [Google Drive 
     │   ├── prothgt-esm2-train-graph.pt
     │   ├── prothgt-esm2-val-graph.pt
     │   └── prothgt-esm2-test-graph.pt
-    └──prot_t5/
-        ├── prothgt-prot_t5-train-graph.pt
-        ├── prothgt-prot_t5-val-graph.pt
-        └── prothgt-prot_t5-test-graph.pt
+    └──prott5/
+        ├── prothgt-prott5-train-graph.pt
+        ├── prothgt-prott5-val-graph.pt
+        └── prothgt-prott5-test-graph.pt
 ```
 
 Once downloaded, place the files inside this `data/` directory so that `train.py` and `predict.py` can access them.
