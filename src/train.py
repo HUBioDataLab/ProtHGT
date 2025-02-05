@@ -11,9 +11,9 @@ import torch.nn.functional as F
 import torch_geometric.transforms as T
 from torch_geometric.loader import LinkNeighborLoader
 
-# Assuming these are from local modules
-from model import ProtHGT  # Your model implementation
-from utils import metrics  # Your metrics implementation
+from data_loader import load_and_prepare_data, create_data_loaders
+from model import ProtHGT
+from utils import metrics
 
 
 def parse_args():
@@ -35,29 +35,6 @@ def load_config(config_path):
     with open(config_path, 'r') as f:
         return json.load(f)
 
-def prepare_data(data, is_train=False, disjoint_ratio=0.3, target_type=None):
-    """Prepare dataset for training/validation/testing."""
-    if is_train:
-        transform = T.RandomLinkSplit(
-            num_val=0.0,
-            num_test=0.0,
-            neg_sampling_ratio=0.0,
-            disjoint_train_ratio=disjoint_ratio,
-            add_negative_train_samples=False,
-            edge_types=[('Protein', 'protein_function', target_type)],
-            rev_edge_types=[(target_type, 'rev_protein_function', 'Protein')],
-        )
-        train_data, _, _ = transform(data)
-        return train_data
-    else:
-        # For validation and test sets
-        data[("Protein", "protein_function", target_type)].edge_label_index = \
-            data[("Protein", "protein_function", target_type)].edge_index
-        data[("Protein", "protein_function", target_type)].edge_label = \
-            torch.ones(data[("Protein", "protein_function", target_type)].edge_index.shape[1], 
-                      dtype=torch.float)
-        return data
-
 # initialize lazy parameters
 @torch.no_grad()
 def init_params(model,loader, device, target_type):
@@ -71,7 +48,6 @@ def train(model, optim, loader, epoch, device, target_type, config):
     total_examples = total_loss = 0
     num_batches = len(loader)
     
-    # Use tqdm for progress tracking
     pbar = tqdm(enumerate(loader), total=num_batches, desc=f'Epoch {epoch}')
     
     try:
@@ -79,7 +55,6 @@ def train(model, optim, loader, epoch, device, target_type, config):
             optim.zero_grad()
             batch = batch.to(device)
             
-            # Wrap model forward pass in try-except
             try:
                 out, _ = model(
                     batch.x_dict, 
@@ -94,26 +69,20 @@ def train(model, optim, loader, epoch, device, target_type, config):
             true_label = batch[("Protein", "protein_function", target_type)].edge_label
             true_label_size = len(true_label)
 
-            # Debug information for first batch of first epoch
             if batch_idx == 0 and epoch == 1:
                 print(f'\nFirst batch statistics:')
                 print(f'Output shape: {out.shape}, range: [{out.min():.3f}, {out.max():.3f}]')
                 print(f'Label shape: {true_label.shape}, unique values: {torch.unique(true_label).tolist()}\n')
 
-            # Calculate loss with gradient clipping
             pos_weight = torch.tensor([config["pos_weight"]]).to(device)
             loss = F.binary_cross_entropy_with_logits(out, true_label, pos_weight=pos_weight)
             loss.backward()
-            
-            # Add gradient clipping
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            
+                        
             optim.step()
 
             total_examples += true_label_size
             total_loss += float(loss) * true_label_size
             
-            # Update progress bar with current loss
             pbar.set_postfix({'loss': f'{loss.item():.4f}'})
 
     except Exception as e:
@@ -164,7 +133,7 @@ def test(model, test_loader, epoch, device, target_type, config):
             ts_loss = F.binary_cross_entropy_with_logits(pred, true_label, pos_weight=pos_weight)
             
             with warnings.catch_warnings():
-                warnings.simplefilter("ignore")  # Suppress numpy warnings
+                warnings.simplefilter("ignore")
                 binary_pred = np.where(pred.numpy() > 0.0, 1, 0)
                 prob_pred = torch.sigmoid(pred).numpy()
 
@@ -182,7 +151,6 @@ def test(model, test_loader, epoch, device, target_type, config):
             total_acc += float(score_list[4]) * true_label_size
             total_mcc += float(score_list[5]) * true_label_size
             
-            # Update progress bar with current metrics
             pbar.set_postfix({
                 'loss': f'{ts_loss:.4f}',
                 'f1': f'{score_list[2]:.4f}'
@@ -219,20 +187,7 @@ def train_validation(
     checkpoint_dir=None,
     num_workers=2
 ):
-    """
-    Training and validation loop for the HGT model.
-    
-    Args:
-        train_data: Training dataset
-        val_data: Validation dataset
-        test_data: Test dataset
-        config: Configuration dictionary containing model and training parameters
-        run_name: Name of the current run
-        target_type: Type of target prediction
-        output_dir: Directory to save outputs (default: "./outputs")
-        checkpoint_dir: Directory to save checkpoints (default: None)
-        num_workers: Number of workers for data loading (default: 2)
-    """
+    """Training and validation loop for the HGT model."""
     # Create output directories
     model_dir = os.path.join(output_dir, "models", run_name)
     results_dir = os.path.join(output_dir, "results")
@@ -243,43 +198,8 @@ def train_validation(
     print(f"Starting training run: {run_name}")
 
     # Initialize data loaders
-    train_loader = LinkNeighborLoader(
-        train_data,
-        num_neighbors=config['num_neighbors'],
-        neg_sampling_ratio=config['neg_sample_ratio'],
-        shuffle=True,
-        edge_label=train_data["Protein", "protein_function", target_type].edge_label,
-        edge_label_index=(("Protein", "protein_function", target_type), 
-                         train_data["Protein", "protein_function", target_type].edge_label_index),
-        batch_size=config['tr_batch_size'],
-        num_workers=num_workers,
-        pin_memory=True
-    )
-
-    val_loader = LinkNeighborLoader(
-        val_data,
-        num_neighbors=[-1],
-        neg_sampling_ratio=config['neg_sample_ratio'],
-        shuffle=False,
-        edge_label=val_data["Protein", "protein_function", target_type].edge_label,
-        edge_label_index=(("Protein", "protein_function", target_type),
-                         val_data["Protein", "protein_function", target_type].edge_label_index),
-        batch_size=int(len(val_data["Protein", "protein_function", target_type].edge_label)),
-        num_workers=num_workers,
-        pin_memory=True
-    )
-
-    test_loader = LinkNeighborLoader(
-        test_data,
-        num_neighbors=[-1],
-        neg_sampling_ratio=config['neg_sample_ratio'],
-        shuffle=False,
-        edge_label=test_data["Protein", "protein_function", target_type].edge_label,
-        edge_label_index=(("Protein", "protein_function", target_type),
-                         test_data["Protein", "protein_function", target_type].edge_label_index),
-        batch_size=int(len(test_data["Protein", "protein_function", target_type].edge_label)),
-        num_workers=num_workers,
-        pin_memory=True
+    train_loader, val_loader, test_loader = create_data_loaders(
+        train_data, val_data, test_data, config, target_type, num_workers
     )
 
     # Setup device and model
@@ -369,23 +289,15 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}\n")
 
-    # Load data
-    print("Loading datasets...")
-    train_data_split = torch.load(args.train_data)
-    val_data = torch.load(args.val_data)
-    test_data = torch.load(args.test_data)
-
-    # Print initial statistics
-    print("Initial data statistics:")
-    print(f"Train edges: {len(train_data_split['Protein', 'protein_function', args.target_type].edge_index[0])}")
-
-    # Prepare datasets
-    print("\nPreparing datasets...")
-    train_data = prepare_data(train_data_split, is_train=True, 
-                            disjoint_ratio=args.disjoint_ratio, 
-                            target_type=args.target_type)
-    val_data = prepare_data(val_data, target_type=args.target_type)
-    test_data = prepare_data(test_data, target_type=args.target_type)
+    # Load and prepare data
+    print("Loading and preparing datasets...")
+    train_data, val_data, test_data = load_and_prepare_data(
+        args.train_data, 
+        args.val_data, 
+        args.test_data,
+        args.target_type,
+        args.disjoint_ratio
+    )
 
     # Print dataset statistics
     print("\nDataset statistics:")
@@ -405,7 +317,7 @@ def main():
 
     # Start training
     print('----------------------Starting training----------------------\n')
-    run_name = f'mlp_{args.target_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+    run_name = f'{args.target_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
     
     try:
         train_validation(
