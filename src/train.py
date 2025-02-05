@@ -314,9 +314,23 @@ def main():
 
     # Print model information
     print("Dataset information:")
-    print(f"Train Data: {train_data}")
-    print(f"Validation Data: {val_data}")
-    print(f"Test Data: {test_data}\n")
+    print("\nTrain Data:")
+    for node_type in train_data.node_types:
+        print(f"{node_type} features shape: {train_data[node_type].x.shape}")
+    for edge_type in train_data.edge_types:
+        print(f"{edge_type} edges: {train_data[edge_type].edge_index.shape[1]}")
+        
+    print("\nValidation Data:")
+    for node_type in val_data.node_types:
+        print(f"{node_type} features shape: {val_data[node_type].x.shape}")
+    for edge_type in val_data.edge_types:
+        print(f"{edge_type} edges: {val_data[edge_type].edge_index.shape[1]}")
+        
+    print("\nTest Data:")
+    for node_type in test_data.node_types:
+        print(f"{node_type} features shape: {test_data[node_type].x.shape}")
+    for edge_type in test_data.edge_types:
+        print(f"{edge_type} edges: {test_data[edge_type].edge_index.shape[1]}\n")
 
     # Start training
     print('----------------------Starting training----------------------\n')
