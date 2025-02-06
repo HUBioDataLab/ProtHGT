@@ -10,6 +10,13 @@ ProtHGT achieves state-of-the-art performance on benchmark datasets, demonstrati
 | **Schematic representation of the ProtHGT framework.** **a)** Diverse biological datasets, including proteins, pathways, domains, and GO terms, are integrated into a unified knowledge graph; **b)** the heterogeneous graph is constructed, capturing multi-relational biological associations; **c)** feature vectors for each node type are generated using state-of-the-art embedding methods; **d)** protein function prediction models are trained separately for molecular function, biological process, and cellular component sub-ontologies; **e)** heterogeneous graph transformer (HGT) layers process and refine node representations through multi-relational message passing. Final protein function predictions are obtained by linking proteins to GO terms based on learned embeddings and attention-weighted relationships. |
 
 ## Content <!-- omit in toc -->
+- [The Architecture of ProtHGT](#the-architecture-of-prothgt)
+- [Repository Structure](#repository-structure)
+- [Getting Started](#getting-started)
+- [Training the ProtHGT Model](#training-the-prothgt-model)
+- [Making Predictions](#making-predictions)
+- [License](#license)
+
 
 ## The Architecture of ProtHGT
 
