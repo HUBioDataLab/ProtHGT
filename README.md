@@ -15,6 +15,7 @@ ProtHGT achieves state-of-the-art performance on benchmark datasets, demonstrati
 - [Getting Started](#getting-started)
 - [Training the ProtHGT Model](#training-the-prothgt-model)
 - [Making Predictions](#making-predictions)
+- [Publication](#publication)
 - [License](#license)
 
 
@@ -129,8 +130,6 @@ The output file is a csv file containing the following columns:
 Please refer to our preprint for more information. If you use the ProtHGT method or the datasets provided in this repository, please cite this paper:
 
 Ulusoy, E., & Dogan, T. (2025). ProtHGT: Heterogeneous Graph Transformers for Automated Protein Function Prediction Using Biological Knowledge Graphs and Language Models (p. 2025.04.19.649272). bioRxiv. [Link](https://doi.org/10.1101/2025.04.19.649272)
-
-<br/>
 
 ## License
 Copyright (C) 2025 HUBioDataLab
