@@ -1,5 +1,5 @@
 # ProtHGT: Heterogeneous Graph Transformers for Automated Protein Function Prediction Using Knowledge Graphs and Language Models
-[![tool](https://img.shields.io/badge/tool-x.svg?logo=streamlit&logoColor=black&color=ffd21c)](https://huggingface.co/spaces/HUBioDataLab/ProtHGT) [![license](https://img.shields.io/badge/license-GPLv3-blue.svg)](http://www.gnu.org/licenses/)
+[![preprint](https://img.shields.io/badge/preprint-10.1101/2025.04.19.649272-b31b1b)](https://www.biorxiv.org/content/10.1101/2025.04.19.649272v1) [![tool](https://img.shields.io/badge/tool-x.svg?logo=streamlit&logoColor=black&color=ffd21c)](https://huggingface.co/spaces/HUBioDataLab/ProtHGT) [![license](https://img.shields.io/badge/license-GPLv3-blue.svg)](http://www.gnu.org/licenses/)
 
 
 The rapid accumulation of protein sequence data, coupled with the slow pace of experimental annotations, creates a critical need for computational methods to predict protein functions. Existing models often rely on limited data types, such as sequence-based features or protein-protein interactions (PPIs), failing to capture the complex molecular relationships in biological systems. To address this, we developed ProtHGT, a heterogeneous graph transformer-based model that integrates diverse biological datasets into a unified framework using knowledge graphs for accurate and interpretable protein function prediction.
@@ -124,6 +124,13 @@ The output file is a csv file containing the following columns:
 - `Probability`: Probability of the prediction.
 
 **Note:** Currently, ProtHGT can only generate predictions for proteins that exist in our knowledge graph, which includes over 300,000 UniProtKB/Swiss-Prot proteins. To enable predictions for novel proteins from their sequences, we are developing a real-time data retrieval system that dynamically fetches relational data from external sources (e.g., STRING, Reactome) and constructs a customized knowledge graph for inference. This system will allow ProtHGT to predict functions for previously unseen proteins by integrating newly acquired biological relationships.
+
+## Publication
+Please refer to our preprint for more information. If you use the ProtHGT method or the datasets provided in this repository, please cite this paper:
+
+Ulusoy, E., & Dogan, T. (2025). ProtHGT: Heterogeneous Graph Transformers for Automated Protein Function Prediction Using Biological Knowledge Graphs and Language Models (p. 2025.04.19.649272). bioRxiv. [Link](https://doi.org/10.1101/2025.04.19.649272)
+
+<br/>
 
 ## License
 Copyright (C) 2025 HUBioDataLab
