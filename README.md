@@ -87,7 +87,7 @@ pip install -r requirements.txt
 For training the ProtHGT model, run the `train.py` script with the following example command:
 
 ```sh
-python train.py --train-data ../data/prothgt-train-graph.pt --val-data ../data/prothgt-val-graph.pt --test-data ../data/prothgt-test-graph.pt --target-type GO_term_F --config ../configs/config.json
+python train.py --train-data ../data/prothgt-train-graph.pt --val-data ../data/prothgt-val-graph.pt --test-data ../data/prothgt-test-graph.pt --target-type GO_term_F --config ../configs/prothgt-config-molecular-function.yaml
 ```
 
 **Arguments:**
