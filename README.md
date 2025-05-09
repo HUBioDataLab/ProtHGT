@@ -105,7 +105,7 @@ Before running the training script, make sure that the data files are correctly 
 
 ## Making Predictions
 
-To generate function predictions for a given protein list using ProtHGT, you can either use our web-service here: [ProtHGT Web-Service](https://huggingface.co/spaces/HUBioDataLab/ProtHGT) or run the `predict.py` script with the following example command. This script uses our trained ProtHGT models provided in `models/` directory to make predictions.
+To generate function predictions for a given protein list using ProtHGT, you can either use our web-service here: [ProtHGT Web-Service](https://huggingface.co/spaces/HUBioDataLab/ProtHGT) or run the `predict.py` script with the following example command. This script uses pre-trained ProtHGT models—currently trained with TAPE embeddings as the default protein representations—available in the `models/` directory. Models trained with alternative protein embeddings will be provided in future releases.
 
 ```sh
 python predict.py --protein_ids ..data/example_protein_ids.txt --heterodata_path ../data/prothgt-kg.pt --go_category all
