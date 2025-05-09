@@ -10,11 +10,13 @@ from tqdm import tqdm
 import torch.nn.functional as F
 import torch_geometric.transforms as T
 from torch_geometric.loader import LinkNeighborLoader
+from torch_geometric import seed_everything
 
 from data_loader import load_and_prepare_data, create_data_loaders
 from model import ProtHGT
 from utils import metrics
 
+seed_everything(42)
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train ProtHGT model for protein function prediction')
@@ -288,13 +290,23 @@ def train_validation(
     
 def main():
     args = parse_args()
-    
+    target_type_dict = {
+        'GO_term_F': 'Molecular Function',
+        'GO_term_P': 'Biological Process',
+        'GO_term_C': 'Cellular Component'
+    }
+
+    print(f'Starting training model for {target_type_dict[args.target_type]} target type')
     # System information
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}\n")
 
     # Load and prepare data
-    print("Loading and preparing datasets...")
+    print("Loading and preparing datasets:")
+    print(f'Train data: {args.train_data}')
+    print(f'Val data: {args.val_data}')
+    print(f'Test data: {args.test_data}')
+
     train_data, val_data, test_data = load_and_prepare_data(
         args.train_data, 
         args.val_data, 
@@ -302,35 +314,10 @@ def main():
         args.target_type,
     )
 
-    # Print dataset statistics
-    print("\nDataset statistics:")
-    print(f"Train edges: {train_data['Protein', 'protein_function', args.target_type].edge_label_index.shape[1]}")
-    print(f"Validation edges: {val_data['Protein', 'protein_function', args.target_type].edge_label_index.shape[1]}")
-    print(f"Test edges: {test_data['Protein', 'protein_function', args.target_type].edge_label_index.shape[1]}\n")
-
     # Load configuration
+    print(f"Loading configuration from {args.config}")
     config = load_config(args.config)
     print(f"Configuration:\n{json.dumps(config, indent=2)}\n")
-
-    # Print model information
-    print("Dataset information:")
-    print("\nTrain Data:")
-    for node_type in train_data.node_types:
-        print(f"{node_type} features shape: {train_data[node_type].x.shape}")
-    for edge_type in train_data.edge_types:
-        print(f"{edge_type} edges: {train_data[edge_type].edge_index.shape[1]}")
-        
-    print("\nValidation Data:")
-    for node_type in val_data.node_types:
-        print(f"{node_type} features shape: {val_data[node_type].x.shape}")
-    for edge_type in val_data.edge_types:
-        print(f"{edge_type} edges: {val_data[edge_type].edge_index.shape[1]}")
-        
-    print("\nTest Data:")
-    for node_type in test_data.node_types:
-        print(f"{node_type} features shape: {test_data[node_type].x.shape}")
-    for edge_type in test_data.edge_types:
-        print(f"{edge_type} edges: {test_data[edge_type].edge_index.shape[1]}\n")
 
     # Start training
     print('----------------------Starting training----------------------\n')
