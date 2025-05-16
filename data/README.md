@@ -12,14 +12,17 @@ You can download the ProtHGT knowledge graph data files from this [Google Drive 
 ├── prothgt-test-graph.pt              # Test set (10% of the default full KG).
 └── alternative_protein_embeddings/    # Contains alternative KGs with different protein representations (e.g., APAAC, ESM-2 and ProtT5).
     ├──apaac/
+        ├── prothgt-apaac-kg.pt
         ├── prothgt-apaac-train-graph.pt
         ├── prothgt-apaac-val-graph.pt
         └── prothgt-apaac-test-graph.pt
     ├──esm2/
-    │   ├── prothgt-esm2-train-graph.pt
-    │   ├── prothgt-esm2-val-graph.pt
-    │   └── prothgt-esm2-test-graph.pt
+        ├── prothgt-esm2-kg.pt
+        ├── prothgt-esm2-train-graph.pt
+        ├── prothgt-esm2-val-graph.pt
+        └── prothgt-esm2-test-graph.pt
     └──prott5/
+        ├── prothgt-prott5-kg.pt
         ├── prothgt-prott5-train-graph.pt
         ├── prothgt-prott5-val-graph.pt
         └── prothgt-prott5-test-graph.pt
