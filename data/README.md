@@ -2,7 +2,7 @@ This directory contains the knowledge graph data files required to train and eva
 
 ## Downloading the Data
 
-You can download the ProtHGT knowledge graph data files from this [Google Drive link](https://drive.google.com/drive/u/0/folders/1VcMcayVnBD82F7xcUzLFNzlEixRSoFSu).
+You can download the ProtHGT knowledge graph data files from this [Hugging Face link](https://huggingface.co/datasets/HUBioDataLab/ProtHGT).
 
 ## Available Files
 ```
