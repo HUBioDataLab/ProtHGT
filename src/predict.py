@@ -5,18 +5,51 @@ import pandas as pd
 import yaml
 import copy
 from model import ProtHGT
+from tqdm.auto import tqdm
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+
+def _root_path(*parts: str) -> str:
+    return os.path.join(PROJECT_ROOT, *parts)
 
 MODEL_CONFIG_PATHS = {
-    'GO_term_F': os.path.join('../configs', "prothgt-config-molecular-function.yaml"),
-    'GO_term_P': os.path.join('../configs', "prothgt-config-biological-process.yaml"),
-    'GO_term_C': os.path.join('../configs', "prothgt-config-cellular-component.yaml")
+    'tape': {'GO_term_F': _root_path('configs', "prothgt-config-molecular-function.yaml"),
+    'GO_term_P': _root_path('configs', "prothgt-config-biological-process.yaml"),
+    'GO_term_C': _root_path('configs', "prothgt-config-cellular-component.yaml")},
+
+    'prott5': {'GO_term_F': _root_path('configs', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-config-molecular-function.yaml"),
+    'GO_term_P': _root_path('configs', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-config-biological-process.yaml"),
+    'GO_term_C': _root_path('configs', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-config-cellular-component.yaml")},
+    
+    'esm2': {'GO_term_F': _root_path('configs', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-config-molecular-function.yaml"),
+    'GO_term_P': _root_path('configs', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-config-biological-process.yaml"),
+    'GO_term_C': _root_path('configs', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-config-cellular-component.yaml")},
 }
 
 MODEL_PATHS = {
-        'GO_term_F': os.path.join('../models', "prothgt-model-molecular-function.pt"),
-        'GO_term_P': os.path.join('../models', "prothgt-model-biological-process.pt"),
-        'GO_term_C': os.path.join('../models', "prothgt-model-cellular-component.pt")
+    'tape': {
+        'GO_term_F': _root_path('models', "prothgt-model-molecular-function.pt"),
+        'GO_term_P': _root_path('models', "prothgt-model-biological-process.pt"),
+        'GO_term_C': _root_path('models', "prothgt-model-cellular-component.pt")
+    },
+    'prott5': {
+        'GO_term_F': _root_path('models', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-model-molecular-function.pt"),
+        'GO_term_P': _root_path('models', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-model-biological-process.pt"),
+        'GO_term_C': _root_path('models', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-model-cellular-component.pt")
+    },
+    'esm2': {
+        'GO_term_F': _root_path('models', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-model-molecular-function.pt"),
+        'GO_term_P': _root_path('models', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-model-biological-process.pt"),
+        'GO_term_C': _root_path('models', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-model-cellular-component.pt")
     }
+}
+
+HETERODATA_PATHS = {
+    'tape': _root_path('data', "prothgt-kg.pt"),
+    'prott5': _root_path('data', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-kg.pt"),
+    'esm2': _root_path('data', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-kg.pt"),
+}
 
 GO_CATEGORIES = {
     'all': None,
@@ -27,11 +60,11 @@ GO_CATEGORIES = {
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--protein_ids', type=str, required=True)
-    parser.add_argument('--heterodata_path', type=str, default='../data/prothgt-kg.pt',)
-    parser.add_argument('--go_category', type=str, required=True)
-    parser.add_argument('--output_dir', type=str, default='../predictions')
-    parser.add_argument('--batch_size', type=int, default=100)
+    parser.add_argument('--protein_ids', type=str, required=True, help='Path to the file containing the protein IDs')
+    parser.add_argument('--protein_embedding', type=str, default='tape', choices=['tape', 'prott5', 'esm2'], help='Protein embedding to use')
+    parser.add_argument('--go_category', type=str, default='all', choices=['all', 'molecular_function', 'biological_process', 'cellular_component'], help='GO category to predict')
+    parser.add_argument('--output_dir', type=str, default='../predictions', help='Path to the output directory')
+    parser.add_argument('--batch_size', type=int, default=100, help='Number of proteins to process in each batch')
     return parser.parse_args()
 
 def load_data(heterodata, protein_ids, go_category):
@@ -111,20 +144,26 @@ def create_prediction_df(predictions, heterodata, protein_ids, go_category):
     
     return prediction_df
 
-def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, model_config_paths, go_category, output_dir, batch_size=100):
+def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, model_config_paths, go_category, output_dir, prediction_file_path, batch_size=100):
     
     os.makedirs(output_dir, exist_ok=True)
 
     heterodata = torch.load(heterodata_path)
 
     # read protein id list from file or as string seperated by commas
-    if protein_ids.endswith('.txt'):
+    # Check if the given protein_ids is a path to a txt file
+    if isinstance(protein_ids, str) and protein_ids.endswith('.txt'):
         with open(protein_ids, 'r') as file:
-            protein_ids = file.read().splitlines()
-            protein_ids = [pid.strip() for pid in protein_ids]
-            protein_ids = list(dict.fromkeys(protein_ids))
+            protein_ids = [line.strip() for line in file if line.strip()]
+        protein_ids = list(dict.fromkeys(protein_ids))  # Remove duplicates, preserve order
+    elif isinstance(protein_ids, str):
+        protein_ids = [pid.strip() for pid in protein_ids.split(',') if pid.strip()]
+        protein_ids = list(dict.fromkeys(protein_ids))  # Remove duplicates, preserve order
+    elif isinstance(protein_ids, list):
+        protein_ids = [str(pid).strip() for pid in protein_ids if str(pid).strip()]
+        protein_ids = list(dict.fromkeys(protein_ids))  # Remove duplicates, preserve order
     else:
-        protein_ids = protein_ids.split(',')
+        raise ValueError("protein_ids must be a string (file path or comma-separated) or a list.")
 
     # check if all protein ids are in the heterodata
     protein_ids_not_found = []
@@ -135,9 +174,15 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
     if protein_ids_not_found:
         print(f'The following proteins were not found in our input knowledge graph and have been discarded:')
         for pid in protein_ids_not_found:
-            print(pid)
+            print(f'{pid}')
     
-    print(f'Processing {len(protein_ids)-len(protein_ids_not_found)}/{len(protein_ids)} proteins')
+    # Actually discard missing proteins from prediction list (preserve order)
+    if protein_ids_not_found:
+        not_found = set(protein_ids_not_found)
+        protein_ids = [pid for pid in protein_ids if pid not in not_found]
+
+    print(f'Processing {len(protein_ids)}/{len(protein_ids) + len(protein_ids_not_found)} proteins')
+    print('--------------------------------')
 
     # Convert single protein ID to list if necessary
     if isinstance(protein_ids, str):
@@ -152,11 +197,13 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
     all_predictions_dfs = []
 
     for go_cat, model_config_path, model_path in zip(go_category, model_config_paths, model_paths):
-        print(f'Generating predictions for {go_cat}...')
+        if len(go_category) > 1:
+            print(f'Generating predictions for {go_cat}...')
         
         # Load model config and initialize model (moved outside batch loop)
         with open(model_config_path, 'r') as file:
             model_config = yaml.safe_load(file)
+        print(f'Loaded model config from {model_config_path}')
         
         model = ProtHGT(
             heterodata,
@@ -173,8 +220,11 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
         category_predictions = []
         
         # Process each batch
-        for batch_idx, batch_proteins in enumerate(batch_generator(protein_ids, batch_size)):
-            print(f'Processing batch {batch_idx + 1} for {go_cat}...')
+        num_batches = (len(protein_ids) + batch_size - 1) // batch_size
+        batch_desc = f"{go_cat} batches" if len(go_category) > 1 else "Batches"
+        for batch_idx, batch_proteins in enumerate(
+            tqdm(batch_generator(protein_ids, batch_size), total=num_batches, desc=batch_desc)
+        ):
             
             # Process data for current batch
             processed_data = load_data(copy.deepcopy(heterodata), batch_proteins, go_cat)
@@ -207,29 +257,43 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
     del all_predictions_dfs
     torch.cuda.empty_cache()
 
-    final_df.to_csv(os.path.join(output_dir, f'predictions.csv'), index=False)
-    print(f'Predictions saved to {os.path.join(output_dir, "predictions.csv")}')
+    final_df.to_csv(prediction_file_path, index=False)
+    print(f'Predictions saved to {prediction_file_path}')
 
 def main():
     args = parse_args()
 
+    prediction_file_name_prefix = args.protein_ids.split('.txt')[0] if args.protein_ids.endswith('.txt') else 'predictions'
+    from datetime import datetime
+    now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    prediction_file_name = f'{prediction_file_name_prefix}_{args.protein_embedding}_{args.go_category}_{now_str}.csv'
+    prediction_file_path = os.path.join(args.output_dir, prediction_file_name)
+    embedding = args.protein_embedding
+    print(f'Using protein embedding: {embedding}')
+    heterodata_path = HETERODATA_PATHS[embedding]
+    print(f'Using heterodata path: {heterodata_path}')
+
     if args.go_category == 'all':
-        model_config_paths = [MODEL_CONFIG_PATHS[cat] for cat in ['GO_term_F', 'GO_term_P', 'GO_term_C']]
-        model_paths = [MODEL_PATHS[cat] for cat in ['GO_term_F', 'GO_term_P', 'GO_term_C']]
+        print(f'Predicting for all GO categories')
         go_categories = ['GO_term_F', 'GO_term_P', 'GO_term_C']
     else:
-        model_config_paths = [MODEL_CONFIG_PATHS[args.go_category]]
-        model_paths = [MODEL_PATHS[args.go_category]]
-        go_categories = GO_CATEGORIES[args.go_category]
+        print(f'Predicting for GO category: {args.go_category}')
+        go_categories = [GO_CATEGORIES[args.go_category]]
 
+    model_config_paths = [MODEL_CONFIG_PATHS[embedding][cat] for cat in go_categories]
+    model_paths = [MODEL_PATHS[embedding][cat] for cat in go_categories]
+
+    print(f'Generating and saving predictions...')
+    print('--------------------------------')
     generate_and_save_predictions(
         args.protein_ids, 
-        args.heterodata_path, 
+        heterodata_path, 
         model_paths, 
         model_config_paths, 
         go_categories, 
         args.output_dir,
-        args.batch_size
+        prediction_file_path,
+        args.batch_size,
     )
 
 if __name__ == '__main__':
