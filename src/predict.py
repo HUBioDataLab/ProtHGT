@@ -65,42 +65,41 @@ def parse_args():
     parser.add_argument('--go_category', type=str, default='all', choices=['all', 'molecular_function', 'biological_process', 'cellular_component'], help='GO category to predict')
     parser.add_argument('--output_dir', type=str, default='../predictions', help='Path to the output directory')
     parser.add_argument('--batch_size', type=int, default=100, help='Number of proteins to process in each batch')
+    parser.add_argument('--threshold', type=float, default=0.0, help='Threshold for filtering predictions')
     return parser.parse_args()
 
 def load_data(heterodata, protein_ids, go_category):
 
-    """Process the loaded heterodata for specific proteins and GO categories."""
-    # Get protein indices for all input proteins
-    protein_indices = [heterodata['Protein']['id_mapping'][pid] for pid in protein_ids]
+    """
+    Build a candidate edge_label_index (Protein × GO terms) for inference.
+    """
+    protein_indices = torch.tensor(
+        [heterodata['Protein']['id_mapping'][pid] for pid in protein_ids],
+        dtype=torch.long,
+    )
     n_terms = len(heterodata[go_category]['id_mapping'])
+    term_indices = torch.arange(n_terms, dtype=torch.long)
 
-    all_edges = []
-    for protein_idx in protein_indices:
-        for term_idx in range(n_terms):
-            all_edges.append([protein_idx, term_idx])
+    row = protein_indices.repeat_interleave(n_terms)
+    col = term_indices.repeat(len(protein_indices))
+    edge_label_index = torch.stack([row, col], dim=0)
+    return edge_label_index
 
-    edge_index = torch.tensor(all_edges).t()
-
-    heterodata[('Protein', 'protein_function', go_category)].edge_index = edge_index
-    heterodata[(go_category, 'rev_protein_function', 'Protein')].edge_index = torch.stack([edge_index[1], edge_index[0]])
-    
-    return heterodata
-
-def generate_predictions(heterodata, model, target_type):
+def generate_predictions(heterodata, model, edge_label_index, target_type):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     model.to(device)
     model.eval()
     heterodata = heterodata.to(device)
+    edge_label_index = edge_label_index.to(device)
 
     with torch.no_grad():
-        edge_label_index = heterodata.edge_index_dict[('Protein', 'protein_function', target_type)]
         predictions, _ = model(heterodata.x_dict, heterodata.edge_index_dict, edge_label_index, target_type)
         predictions = torch.sigmoid(predictions)
     
     return predictions.cpu()
 
-def create_prediction_df(predictions, heterodata, protein_ids, go_category):
+def create_prediction_df(predictions, heterodata, protein_ids, go_category, threshold: float = 0.0):
         
 
     go_category_dict = {
@@ -109,17 +108,17 @@ def create_prediction_df(predictions, heterodata, protein_ids, go_category):
         'GO_term_C': 'Cellular Component'
     }
 
-    # Get number of GO terms for this category
-    n_go_terms = len(heterodata[go_category]['id_mapping'])
+    id_mapping = heterodata[go_category]['id_mapping']  # dict: GO_id -> index
+    n_go_terms = len(id_mapping)
     
-    # Create lists to store the data
     all_proteins = []
     all_go_terms = []
     all_categories = []
     all_probabilities = []
     
-    # Get list of GO terms once
-    go_terms = list(heterodata[go_category]['id_mapping'].keys())
+    go_terms = [None] * n_go_terms
+    for go_id, idx in id_mapping.items():
+        go_terms[int(idx)] = go_id
     
     # Process predictions for each protein
     for i, protein_id in enumerate(protein_ids):
@@ -127,14 +126,25 @@ def create_prediction_df(predictions, heterodata, protein_ids, go_category):
         start_idx = i * n_go_terms
         end_idx = (i + 1) * n_go_terms
         protein_predictions = predictions[start_idx:end_idx]
+
+        # Apply threshold filter
+        if threshold and threshold > 0.0:
+            keep_mask = protein_predictions >= float(threshold)
+            if keep_mask.any():
+                keep_idx = torch.nonzero(keep_mask, as_tuple=False).view(-1)
+                protein_predictions = protein_predictions[keep_idx]
+            else:
+                continue
+        else:
+            keep_idx = torch.arange(n_go_terms)
         
         # Extend the lists
-        all_proteins.extend([protein_id] * n_go_terms)
-        all_go_terms.extend(go_terms)
-        all_categories.extend([go_category_dict[go_category]] * n_go_terms)
+        k = int(protein_predictions.numel())
+        all_proteins.extend([protein_id] * k)
+        all_go_terms.extend([go_terms[int(j)] for j in keep_idx.tolist()])
+        all_categories.extend([go_category_dict[go_category]] * k)
         all_probabilities.extend(protein_predictions.tolist())
     
-    # Create DataFrame
     prediction_df = pd.DataFrame({
         'Protein': all_proteins,
         'GO_term': all_go_terms,
@@ -144,14 +154,13 @@ def create_prediction_df(predictions, heterodata, protein_ids, go_category):
     
     return prediction_df
 
-def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, model_config_paths, go_category, output_dir, prediction_file_path, batch_size=100):
+def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, model_config_paths, go_category, output_dir, prediction_file_path, batch_size=100, threshold: float = 0.0):
     
     os.makedirs(output_dir, exist_ok=True)
 
     heterodata = torch.load(heterodata_path)
 
     # read protein id list from file or as string seperated by commas
-    # Check if the given protein_ids is a path to a txt file
     if isinstance(protein_ids, str) and protein_ids.endswith('.txt'):
         with open(protein_ids, 'r') as file:
             protein_ids = [line.strip() for line in file if line.strip()]
@@ -176,7 +185,6 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
         for pid in protein_ids_not_found:
             print(f'{pid}')
     
-    # Actually discard missing proteins from prediction list (preserve order)
     if protein_ids_not_found:
         not_found = set(protein_ids_not_found)
         protein_ids = [pid for pid in protein_ids if pid not in not_found]
@@ -200,7 +208,7 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
         if len(go_category) > 1:
             print(f'Generating predictions for {go_cat}...')
         
-        # Load model config and initialize model (moved outside batch loop)
+        # Load model config and initialize model
         with open(model_config_path, 'r') as file:
             model_config = yaml.safe_load(file)
         print(f'Loaded model config from {model_config_path}')
@@ -226,16 +234,16 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
             tqdm(batch_generator(protein_ids, batch_size), total=num_batches, desc=batch_desc)
         ):
             
-            # Process data for current batch
-            processed_data = load_data(copy.deepcopy(heterodata), batch_proteins, go_cat)
-            
+            # Build candidate edges for this batch
+            edge_label_index = load_data(heterodata, batch_proteins, go_cat)
+
             # Generate predictions for batch
-            predictions = generate_predictions(processed_data, model, go_cat)
-            prediction_df = create_prediction_df(predictions, processed_data, batch_proteins, go_cat)
+            predictions = generate_predictions(heterodata, model, edge_label_index, go_cat)
+            prediction_df = create_prediction_df(predictions, heterodata, batch_proteins, go_cat, threshold=threshold)
             category_predictions.append(prediction_df)
             
             # Clean up batch memory
-            del processed_data
+            del edge_label_index
             del predictions
             torch.cuda.empty_cache()
         
@@ -294,6 +302,7 @@ def main():
         args.output_dir,
         prediction_file_path,
         args.batch_size,
+        threshold=args.threshold,
     )
 
 if __name__ == '__main__':
