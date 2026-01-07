@@ -60,8 +60,8 @@ The MLP predicts the probability of a functional association between a protein a
 ## Repository Structure
 - **data/**: Contains the knowledge graph data required for training and evaluating ProtHGT.  
 Data files can be downloaded from [Hugging Face](https://huggingface.co/datasets/HUBioDataLab/ProtHGT) and must be placed in this directory for `train.py` and `predict.py` to function properly. For more details, please refer to the [data/README.md](data/README.md).
-- **models/**: Contains trained models for each Gene Ontology (GO) category. These models are trained on knowledge graph (KG) datasets using TAPE embeddings as the initial protein representation. The models trained on alternative protein representations will be available soon.
-- **configs/**: Stores configuration files with optimized model parameters and training settings. The hyperparameters are optimized for KG datasets where TAPE embeddings are used as the initial protein representation. The configuration files for alternative protein representations will be available soon.
+- **models/**: Contains trained models for each Gene Ontology (GO) category. It includes models trained with the default TAPE protein embeddings as well as alternative protein representations (e.g., ESM2, ProtT5). All models are trained on their own corresponding knowledge graph (KG) datasets—be sure to select the appropriate model that matches the protein embedding type you intend to use.
+- **configs/**: Contains configuration files specifying optimized model hyperparameters and training settings. There are configuration files both for TAPE-based KG datasets (optimized for those embeddings) and for datasets using alternative protein embeddings (e.g., ESM2, ProtT5). Select the configuration that matches the embedding type of your chosen model. 
 - **src/**: Main source code directory
   - `model.py`: Implementation of the ProtHGT architecture
   - `train.py`: Script for training the model
