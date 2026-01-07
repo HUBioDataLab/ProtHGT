@@ -117,6 +117,7 @@ python predict.py --protein_ids ..data/example_protein_ids.txt --protein_embeddi
 - `--go_category`: GO category to predict. It can be one of the following: `all`, `molecular_function`, `biological_process`, or `cellular_component`.
 - `--output_dir`: Path to the output directory. Default is `../predictions`.
 - `--batch_size`: Number of proteins to process in each batch. Default is 100.
+- `--threshold`: Threshold for filtering predictions. Default is 0.0.
 
 The output file is a csv file containing the following columns:
 - `Protein`: UniProt ID
