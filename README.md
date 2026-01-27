@@ -118,6 +118,7 @@ python predict.py --protein_ids ..data/example_protein_ids.txt --protein_embeddi
 - `--output_dir`: Path to the output directory. Default is `../predictions`.
 - `--batch_size`: Number of proteins to process in each batch. Default is 100.
 - `--threshold`: Threshold for filtering predictions. Default is 0.0.
+- `--top_k`: Keep only top-k GO terms per protein (0 = keep all). Default is 0.
 
 The output file is a csv file containing the following columns:
 - `Protein`: UniProt ID

@@ -66,6 +66,7 @@ def parse_args():
     parser.add_argument('--output_dir', type=str, default='../predictions', help='Path to the output directory')
     parser.add_argument('--batch_size', type=int, default=100, help='Number of proteins to process in each batch')
     parser.add_argument('--threshold', type=float, default=0.0, help='Threshold for filtering predictions')
+    parser.add_argument('--top_k', type=int, default=0, help='Keep only top-k GO terms per protein (0 = keep all).')
     return parser.parse_args()
 
 def load_data(heterodata, protein_ids, go_category):
@@ -99,7 +100,23 @@ def generate_predictions(heterodata, model, edge_label_index, target_type):
     
     return predictions.cpu()
 
-def create_prediction_df(predictions, heterodata, protein_ids, go_category, threshold: float = 0.0):
+def load_model_weights(model, model_path: str, device):
+    """
+    Load either:
+    - a plain state_dict saved via torch.save(model.state_dict(), path)
+    - or a checkpoint dict containing 'model_state_dict'
+    """
+    obj = torch.load(model_path, map_location=device)
+    if isinstance(obj, dict) and "model_state_dict" in obj:
+        state = obj["model_state_dict"]
+        print(f"Loaded checkpoint from {model_path} (epoch={obj.get('epoch')}); using model_state_dict")
+    else:
+        state = obj
+        print(f"Loaded state_dict from {model_path}")
+    model.load_state_dict(state, strict=True)
+    return model
+
+def create_prediction_df(predictions, heterodata, protein_ids, go_category, threshold: float = 0.0, top_k: int = 0):
         
 
     go_category_dict = {
@@ -137,6 +154,14 @@ def create_prediction_df(predictions, heterodata, protein_ids, go_category, thre
                 continue
         else:
             keep_idx = torch.arange(n_go_terms)
+
+        # Apply top-k filter (after threshold)
+        if top_k and int(top_k) > 0:
+            k0 = int(protein_predictions.numel())
+            if k0 > int(top_k):
+                topv, topi = torch.topk(protein_predictions, k=int(top_k), largest=True, sorted=True)
+                protein_predictions = topv
+                keep_idx = keep_idx[topi]
         
         # Extend the lists
         k = int(protein_predictions.numel())
@@ -154,7 +179,7 @@ def create_prediction_df(predictions, heterodata, protein_ids, go_category, thre
     
     return prediction_df
 
-def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, model_config_paths, go_category, output_dir, prediction_file_path, batch_size=100, threshold: float = 0.0):
+def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, model_config_paths, go_category, output_dir, prediction_file_path, batch_size=100, threshold: float = 0.0, top_k: int = 0):
     
     os.makedirs(output_dir, exist_ok=True)
 
@@ -222,8 +247,7 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
             mlp_dropout=model_config['mlp_dropout']
         )
         
-        model.load_state_dict(torch.load(model_path, map_location=device))
-        print(f'Loaded model weights from {model_path}')
+        load_model_weights(model, model_path, device)
         
         category_predictions = []
         
@@ -239,7 +263,7 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
 
             # Generate predictions for batch
             predictions = generate_predictions(heterodata, model, edge_label_index, go_cat)
-            prediction_df = create_prediction_df(predictions, heterodata, batch_proteins, go_cat, threshold=threshold)
+            prediction_df = create_prediction_df(predictions, heterodata, batch_proteins, go_cat, threshold=threshold, top_k=top_k)
             category_predictions.append(prediction_df)
             
             # Clean up batch memory
@@ -265,7 +289,7 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
     del all_predictions_dfs
     torch.cuda.empty_cache()
 
-    final_df.to_csv(prediction_file_path, index=False)
+    final_df.to_csv(prediction_file_path, index=False, float_format="%.3f")
     print(f'Predictions saved to {prediction_file_path}')
 
 def main():
@@ -303,6 +327,7 @@ def main():
         prediction_file_path,
         args.batch_size,
         threshold=args.threshold,
+        top_k=args.top_k,
     )
 
 if __name__ == '__main__':
