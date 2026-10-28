@@ -211,7 +211,7 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_path, mode
 def main():
     args = parse_args()
 
-    prefix = args.protein_ids.split('.txt')[0] if args.protein_ids.endswith('.txt') else 'predictions'
+    prefix = os.path.splitext(os.path.basename(args.protein_ids))[0] if args.protein_ids.endswith('.txt') else 'predictions'
     now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     prediction_file_name = f'{prefix}_{args.protein_embedding}_ec{args.ec_level}_{now_str}.csv'
     prediction_file_path = os.path.join(args.output_dir, prediction_file_name)

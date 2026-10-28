@@ -29,26 +29,26 @@ MODEL_CONFIG_PATHS = {
 
 MODEL_PATHS = {
     'tape': {
-        'GO_term_F': _root_path('models', "prothgt-model-molecular-function.pt"),
-        'GO_term_P': _root_path('models', "prothgt-model-biological-process.pt"),
-        'GO_term_C': _root_path('models', "prothgt-model-cellular-component.pt")
+        'GO_term_F': _root_path('models', 'go', "prothgt-model-molecular-function.pt"),
+        'GO_term_P': _root_path('models', 'go', "prothgt-model-biological-process.pt"),
+        'GO_term_C': _root_path('models', 'go', "prothgt-model-cellular-component.pt")
     },
     'prott5': {
-        'GO_term_F': _root_path('models', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-model-molecular-function.pt"),
-        'GO_term_P': _root_path('models', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-model-biological-process.pt"),
-        'GO_term_C': _root_path('models', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-model-cellular-component.pt")
+        'GO_term_F': _root_path('models', 'go', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-model-molecular-function.pt"),
+        'GO_term_P': _root_path('models', 'go', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-model-biological-process.pt"),
+        'GO_term_C': _root_path('models', 'go', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-model-cellular-component.pt")
     },
     'esm2': {
-        'GO_term_F': _root_path('models', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-model-molecular-function.pt"),
-        'GO_term_P': _root_path('models', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-model-biological-process.pt"),
-        'GO_term_C': _root_path('models', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-model-cellular-component.pt")
+        'GO_term_F': _root_path('models', 'go', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-model-molecular-function.pt"),
+        'GO_term_P': _root_path('models', 'go', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-model-biological-process.pt"),
+        'GO_term_C': _root_path('models', 'go', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-model-cellular-component.pt")
     }
 }
 
 HETERODATA_PATHS = {
-    'tape': _root_path('data', "prothgt-kg.pt"),
-    'prott5': _root_path('data', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-kg.pt"),
-    'esm2': _root_path('data', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-kg.pt"),
+    'tape': _root_path('data', 'go', "prothgt-kg.pt"),
+    'prott5': _root_path('data', 'go', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-kg.pt"),
+    'esm2': _root_path('data', 'go', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-kg.pt"),
 }
 
 GO_CATEGORIES = {
@@ -295,7 +295,8 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
 def main():
     args = parse_args()
 
-    prediction_file_name_prefix = args.protein_ids.split('.txt')[0] if args.protein_ids.endswith('.txt') else 'predictions'
+    # Use the input file's basename (not its full path) for the output file name.
+    prediction_file_name_prefix = os.path.splitext(os.path.basename(args.protein_ids))[0] if args.protein_ids.endswith('.txt') else 'predictions'
     from datetime import datetime
     now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     prediction_file_name = f'{prediction_file_name_prefix}_{args.protein_embedding}_{args.go_category}_{now_str}.csv'
