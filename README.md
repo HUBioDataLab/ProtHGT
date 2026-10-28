@@ -15,6 +15,7 @@ ProtHGT achieves state-of-the-art performance on benchmark datasets, demonstrati
 - [Getting Started](#getting-started)
 - [Training the ProtHGT Model](#training-the-prothgt-model)
 - [Making Predictions](#making-predictions)
+- [Predicting EC Numbers](#predicting-ec-numbers)
 - [Publication](#publication)
 - [License](#license)
 
@@ -57,17 +58,14 @@ return self.mlp(z).view(-1), x_dict
 The MLP predicts the probability of a functional association between a protein and a GO term.
 
 
-## Repository Structure
-- **data/**: Contains the knowledge graph data required for training and evaluating ProtHGT.  
-Data files can be downloaded from [Hugging Face](https://huggingface.co/datasets/HUBioDataLab/ProtHGT) and must be placed in this directory for `train.py` and `predict.py` to function properly. For more details, please refer to the [data/README.md](data/README.md).
-- **models/**: Contains trained models for each Gene Ontology (GO) category. It includes models trained with the default TAPE protein embeddings as well as alternative protein representations (e.g., ESM2, ProtT5). All models are trained on their own corresponding knowledge graph (KG) datasets—be sure to select the appropriate model that matches the protein embedding type you intend to use.
-- **configs/**: Contains configuration files specifying optimized model hyperparameters and training settings. There are configuration files both for TAPE-based KG datasets (optimized for those embeddings) and for datasets using alternative protein embeddings (e.g., ESM2, ProtT5). Select the configuration that matches the embedding type of your chosen model. 
+ProtHGT covers two tasks with the same architecture: **GO term prediction** (default) and **EC number prediction** (`src/ec/`). Data and model files are split accordingly into `go/` and `ec/` subdirectories.
+
+- **data/**: Knowledge graph data for GO (`data/go/`) and EC (`data/ec/`). These files are hosted on [Hugging Face](https://huggingface.co/datasets/HUBioDataLab/ProtHGT) under `knowledge_graphs/`. Download and place them as described in [data/README.md](data/README.md).
+- **models/**: Trained weights for GO (`models/go/`) and EC (`models/ec/`). These are hosted on Hugging Face under `models/`. Download and place them as described in [models/README.md](models/README.md). Each model is trained on its own KG—select the one matching your protein embedding type (TAPE / ESM-2 / ProtT5).
+- **configs/**: Optimized hyperparameter and training config files. GO configs are at the top level (plus `alternative_protein_embeddings/`); EC configs are under `configs/ec/`.
 - **src/**: Main source code directory
-  - `model.py`: Implementation of the ProtHGT architecture
-  - `train.py`: Script for training the model
-  - `predict.py`: Script for generating predictions
-  - `utils.py`: Helper functions and utilities
-  - `data_loader.py`: Helper functions for data loading and preprocessing
+  - `model.py`, `train.py`, `predict.py`, `utils.py`, `data_loader.py`: GO term prediction.
+  - `ec/`: EC number prediction subpackage (`model.py`, `train.py`, `predict.py`, `eval.py`, `data_loader.py`). See [Predicting EC Numbers](#predicting-ec-numbers).
 - **requirements.txt**: Lists all Python package dependencies
 
 ## Getting Started
@@ -88,7 +86,7 @@ pip install -r requirements.txt
 For training the ProtHGT model, run the `train.py` script with the following example command:
 
 ```sh
-python train.py --train-data ../data/prothgt-train-graph.pt --val-data ../data/prothgt-val-graph.pt --test-data ../data/prothgt-test-graph.pt --target-type GO_term_F --config ../configs/prothgt-config-molecular-function.yaml
+python train.py --train-data ../data/go/prothgt-train-graph.pt --val-data ../data/go/prothgt-val-graph.pt --test-data ../data/go/prothgt-test-graph.pt --target-type GO_term_F --config ../configs/prothgt-config-molecular-function.yaml
 ```
 
 **Arguments:**
@@ -101,14 +99,14 @@ python train.py --train-data ../data/prothgt-train-graph.pt --val-data ../data/p
 - `--checkpoint-dir`: Path to the checkpoint directory. Default is None.
 - `--num-workers`: Number of workers for data loading. Default is 2.
 
-Before running the training script, make sure that the data files are correctly placed in the `data/` directory.
+Before running the training script, make sure that the data files are correctly placed in the `data/go/` directory (see [data/README.md](data/README.md)).
 
 ## Making Predictions
 
-To generate function predictions for a given protein list using ProtHGT, you can either use our web-service here: [ProtHGT Web-Service](https://huggingface.co/spaces/HUBioDataLab/ProtHGT) or run the `predict.py` script with the following example command. This script uses pre-trained ProtHGT models—currently trained with TAPE embeddings as the default protein representations—available in the `models/` directory. Models trained with alternative protein embeddings will be provided in future releases.
+To generate function predictions for a given protein list using ProtHGT, you can either use our web-service here: [ProtHGT Web-Service](https://huggingface.co/spaces/HUBioDataLab/ProtHGT) or run the `predict.py` script with the following example command. This script uses pre-trained ProtHGT models (TAPE, ESM-2 or ProtT5 embeddings); download them from [Hugging Face](https://huggingface.co/datasets/HUBioDataLab/ProtHGT) into `models/go/` (see [models/README.md](models/README.md)).
 
 ```sh
-python predict.py --protein_ids ..data/example_protein_ids.txt --protein_embedding tape --go_category all
+python predict.py --protein_ids ../data/example_protein_ids.txt --protein_embedding tape --go_category all
 ```
 
 **Arguments:**
@@ -127,6 +125,53 @@ The output file is a csv file containing the following columns:
 - `Probability`: Probability of the prediction.
 
 **Note:** Currently, ProtHGT can only generate predictions for proteins that exist in our knowledge graph, which includes over 300,000 UniProtKB/Swiss-Prot proteins. To enable predictions for novel proteins from their sequences, we are developing a real-time data retrieval system that dynamically fetches relational data from external sources (e.g., STRING, Reactome) and constructs a customized knowledge graph for inference. This system will allow ProtHGT to predict functions for previously unseen proteins by integrating newly acquired biological relationships.
+
+## Predicting EC Numbers
+
+ProtHGT also predicts Enzyme Commission (EC) numbers at all four hierarchy levels (L1–L4), using the same architecture, implemented in `src/ec/`. A single joint model per embedding shares one HGT backbone across four level-specific decoders.
+
+### Training and reproduction
+Run from inside `src/ec/` (the TAPE example shown; for ESM-2 / ProtT5 use the matching config and graphs under `alternative_protein_embeddings/`):
+```sh
+cd src/ec
+python train.py \
+  --train-data ../../data/ec/prothgt-ec-train-graph.pt \
+  --val-data   ../../data/ec/prothgt-ec-val-graph.pt \
+  --test-data  ../../data/ec/prothgt-ec-test-graph.pt \
+  --config     ../../configs/ec/prothgt-ec-config.yaml
+```
+
+**Arguments:**
+- `--train-data`: Path to the training data file
+- `--val-data`: Path to the validation data file
+- `--test-data`: Path to the test data file
+- `--config`: Path to the configuration file. You can use your own or select from the optimized hyperparameter configurations in the `configs/ec/` directory.
+- `--output-dir`: Path to the output directory. Default is `../../outputs`.
+- `--checkpoint-dir`: Path to the checkpoint directory. Default is None.
+- `--num-workers`: Number of workers for data loading. Default is 2.
+
+At each checkpoint the script reports the per-level precision, recall, F1 and ROC-AUC on the test set, scoring each level independently (every EC level is evaluated against its own full set of classes).
+
+### Prediction
+```sh
+cd src/ec
+python predict.py --protein_ids ../../data/example_protein_ids.txt --protein_embedding tape --ec_level all
+```
+**Arguments:**
+- `--protein_ids`: You can either provide a text file containing a list of protein IDs or a comma-separated string of protein IDs.
+- `--protein_embedding`: Protein embedding to use. It can be one of the following: `tape`, `prott5`, or `esm2`.
+- `--ec_level`: Deepest EC hierarchy level to predict. It can be one of the following: `all`, `1`, `2`, `3`, or `4`.
+- `--output_dir`: Path to the output directory. Default is `../../predictions`.
+- `--threshold`: Probability threshold for keeping a prediction at each level. Default is 0.5.
+- `--top_k`: Keep only top-k candidates per protein per level (0 = keep all above threshold). Default is 0.
+
+The output file is a csv file containing the following columns:
+- `Protein`: UniProt ID
+- `EC`: Predicted EC number (or class prefix for levels L1–L3).
+- `EC_level`: EC hierarchy level, one of `L1`, `L2`, `L3`, `L4`.
+- `Probability`: Probability of the prediction.
+
+Unlike the independent per-level scoring used for evaluation, `predict.py` runs the model as a top-down cascade: L1 is predicted first, and each deeper level is predicted only among the children of the levels kept above it. This yields hierarchically consistent predictions (every predicted L4 number has its predicted L3/L2/L1 ancestors), which is what you want when applying the model to new proteins; a prediction is kept at each level when its probability exceeds `--threshold`.
 
 ## Publication
 Please refer to our preprint for more information. If you use the ProtHGT method or the datasets provided in this repository, please cite this paper:
