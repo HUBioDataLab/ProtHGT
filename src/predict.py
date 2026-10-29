@@ -14,17 +14,17 @@ def _root_path(*parts: str) -> str:
     return os.path.join(PROJECT_ROOT, *parts)
 
 MODEL_CONFIG_PATHS = {
-    'tape': {'GO_term_F': _root_path('configs', "prothgt-config-molecular-function.yaml"),
-    'GO_term_P': _root_path('configs', "prothgt-config-biological-process.yaml"),
-    'GO_term_C': _root_path('configs', "prothgt-config-cellular-component.yaml")},
+    'tape': {'GO_term_F': _root_path('configs', 'go', "prothgt-config-molecular-function.yaml"),
+    'GO_term_P': _root_path('configs', 'go', "prothgt-config-biological-process.yaml"),
+    'GO_term_C': _root_path('configs', 'go', "prothgt-config-cellular-component.yaml")},
 
-    'prott5': {'GO_term_F': _root_path('configs', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-config-molecular-function.yaml"),
-    'GO_term_P': _root_path('configs', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-config-biological-process.yaml"),
-    'GO_term_C': _root_path('configs', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-config-cellular-component.yaml")},
+    'prott5': {'GO_term_F': _root_path('configs', 'go', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-config-molecular-function.yaml"),
+    'GO_term_P': _root_path('configs', 'go', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-config-biological-process.yaml"),
+    'GO_term_C': _root_path('configs', 'go', 'alternative_protein_embeddings', 'prott5', "prothgt-prott5-config-cellular-component.yaml")},
     
-    'esm2': {'GO_term_F': _root_path('configs', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-config-molecular-function.yaml"),
-    'GO_term_P': _root_path('configs', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-config-biological-process.yaml"),
-    'GO_term_C': _root_path('configs', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-config-cellular-component.yaml")},
+    'esm2': {'GO_term_F': _root_path('configs', 'go', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-config-molecular-function.yaml"),
+    'GO_term_P': _root_path('configs', 'go', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-config-biological-process.yaml"),
+    'GO_term_C': _root_path('configs', 'go', 'alternative_protein_embeddings', 'esm2', "prothgt-esm2-config-cellular-component.yaml")},
 }
 
 MODEL_PATHS = {

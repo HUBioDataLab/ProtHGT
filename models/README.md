@@ -7,7 +7,7 @@ The weights are hosted on Hugging Face: [HUBioDataLab/ProtHGT](https://huggingfa
 - GO models → `models/go/` (one model per GO category × embedding)
 - EC models → `models/ec/` (one joint hierarchical model per embedding)
 
-Each model is a plain `state_dict` and must be paired with the matching config in `configs/` (GO) or `configs/ec/` (EC) and the matching knowledge graph in `data/`. Be sure to pick the model whose protein embedding type (TAPE / ESM-2 / ProtT5) matches the KG you use.
+Each model is a plain `state_dict` and must be paired with the matching config in `configs/go/` (GO) or `configs/ec/` (EC) and the matching knowledge graph in `data/`. Be sure to pick the model whose protein embedding type (TAPE / ESM-2 / ProtT5) matches the KG you use.
 
 ## GO term prediction — `models/go/`
 ```

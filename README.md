@@ -62,7 +62,7 @@ ProtHGT covers two tasks with the same architecture: **GO term prediction** (def
 
 - **data/**: Knowledge graph data for GO (`data/go/`) and EC (`data/ec/`). These files are hosted on [Hugging Face](https://huggingface.co/datasets/HUBioDataLab/ProtHGT) under `knowledge_graphs/`. Download and place them as described in [data/README.md](data/README.md).
 - **models/**: Trained weights for GO (`models/go/`) and EC (`models/ec/`). These are hosted on Hugging Face under `models/`. Download and place them as described in [models/README.md](models/README.md). Each model is trained on its own KG—select the one matching your protein embedding type (TAPE / ESM-2 / ProtT5).
-- **configs/**: Optimized hyperparameter and training config files. GO configs are at the top level (plus `alternative_protein_embeddings/`); EC configs are under `configs/ec/`.
+- **configs/**: Optimized hyperparameter and training config files, split by task: GO configs under `configs/go/` and EC configs under `configs/ec/` (each with an `alternative_protein_embeddings/` subdirectory for the ESM-2 / ProtT5 variants).
 - **src/**: Main source code directory
   - `model.py`, `train.py`, `predict.py`, `utils.py`, `data_loader.py`: GO term prediction.
   - `ec/`: EC number prediction subpackage (`model.py`, `train.py`, `predict.py`, `eval.py`, `data_loader.py`). See [Predicting EC Numbers](#predicting-ec-numbers).
@@ -86,7 +86,7 @@ pip install -r requirements.txt
 For training the ProtHGT model, run the `train.py` script with the following example command:
 
 ```sh
-python train.py --train-data ../data/go/prothgt-train-graph.pt --val-data ../data/go/prothgt-val-graph.pt --test-data ../data/go/prothgt-test-graph.pt --target-type GO_term_F --config ../configs/prothgt-config-molecular-function.yaml
+python train.py --train-data ../data/go/prothgt-train-graph.pt --val-data ../data/go/prothgt-val-graph.pt --test-data ../data/go/prothgt-test-graph.pt --target-type GO_term_F --config ../configs/go/prothgt-config-molecular-function.yaml
 ```
 
 **Arguments:**
@@ -94,7 +94,7 @@ python train.py --train-data ../data/go/prothgt-train-graph.pt --val-data ../dat
 - `--val-data`: Path to the validation data file
 - `--test-data`: Path to the test data file
 - `--target-type`: Target prediction type. It can be one of the following: `GO_term_F` for molecular function, `GO_term_P` for biological process, and `GO_term_C` for cellular component.
-- `--config`: Path to the configuration file. You can use your own or select from the optimized hyperparameter configurations in `configs/` directory.
+- `--config`: Path to the configuration file. You can use your own or select from the optimized hyperparameter configurations in the `configs/go/` directory.
 - `--output-dir`: Path to the output directory. Default is `../outputs`.
 - `--checkpoint-dir`: Path to the checkpoint directory. Default is None.
 - `--num-workers`: Number of workers for data loading. Default is 2.
