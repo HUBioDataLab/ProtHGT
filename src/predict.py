@@ -4,6 +4,9 @@ import argparse
 import pandas as pd
 import yaml
 import copy
+import gzip
+import json
+from functools import lru_cache
 from model import ProtHGT
 from tqdm.auto import tqdm
 
@@ -12,6 +15,15 @@ PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 
 def _root_path(*parts: str) -> str:
     return os.path.join(PROJECT_ROOT, *parts)
+
+# Display names of KG nodes (proteins, GO terms, EC numbers, ...), shared with the web service.
+NAME_INFO_PATH = _root_path('data', 'name_info.json.gz')
+
+@lru_cache(maxsize=1)
+def load_name_info(name_file=NAME_INFO_PATH):
+    """{node_type: {node_id: display name}}, e.g. name_info['GO_term']['GO:0005524'] -> 'ATP binding'."""
+    with gzip.open(name_file, 'rt', encoding='utf-8') as file:
+        return json.load(file)
 
 MODEL_CONFIG_PATHS = {
     'tape': {'GO_term_F': _root_path('configs', 'go', "prothgt-config-molecular-function.yaml"),
@@ -186,6 +198,9 @@ def create_prediction_df(predictions, heterodata, protein_ids, go_category, thre
     all_categories = []
     all_probabilities = []
     all_known = []
+    all_protein_names = []
+    all_go_term_names = []
+    name_info = load_name_info()
 
     go_terms = [None] * n_go_terms
     for go_id, idx in id_mapping.items():
@@ -220,15 +235,21 @@ def create_prediction_df(predictions, heterodata, protein_ids, go_category, thre
         # Extend the lists
         k = int(protein_predictions.numel())
         all_proteins.extend([protein_id] * k)
-        all_go_terms.extend([go_terms[int(j)] for j in keep_idx.tolist()])
+        all_protein_names.extend([name_info['Protein'].get(protein_id, protein_id)] * k)
+        kept_go_ids = [go_terms[int(j)] for j in keep_idx.tolist()]
+        all_go_terms.extend(kept_go_ids)
+        all_go_term_names.extend([name_info['GO_term'].get(term_id, term_id) for term_id in kept_go_ids])
         all_categories.extend([go_category_dict[go_category]] * k)
         all_probabilities.extend(protein_predictions.tolist())
         known_terms = known_annotations.get(protein_id, set())
         all_known.extend([int(j) in known_terms for j in keep_idx.tolist()])
 
+    # Same columns and content as the ProtHGT web service.
     prediction_df = pd.DataFrame({
-        'Protein': all_proteins,
-        'GO_term': all_go_terms,
+        'UniProt_ID': all_proteins,
+        'Protein': all_protein_names,
+        'GO_ID': all_go_terms,
+        'GO_term': all_go_term_names,
         'GO_category': all_categories,
         'Probability': all_probabilities,
         'known_annotation': all_known,

@@ -9,6 +9,10 @@ The data files are hosted on Hugging Face: [HUBioDataLab/ProtHGT](https://huggin
 
 The large `.pt` files are not stored in git (see `.gitignore`); download them here before running.
 
+Two small files are included in git and used by `predict.py` to add display names to the predictions (the same files as in the web service):
+- `name_info.json.gz`: names of the knowledge graph nodes (proteins, GO terms, EC numbers, etc.).
+- `ec_class_names.json`: names of the EC classes, subclasses and sub-subclasses (L1–L3), from the ExPASy ENZYME nomenclature.
+
 ## GO term prediction — `data/go/`
 ```
 ├── prothgt-kg.pt                      # Full knowledge graph (default TAPE embeddings); covers all train+val+test proteins.

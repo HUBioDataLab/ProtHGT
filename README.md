@@ -121,7 +121,9 @@ python predict.py --protein_ids ../data/example_protein_ids.txt --protein_embedd
 
 The output file is a csv file containing the following columns:
 - `Protein`: UniProt ID
-- `GO_term`: GO term ID
+- `UniProt_ID`: UniProt ID
+- `GO_ID`: GO term ID
+- `GO_term`: GO term name
 - `GO_category`: GO term category. Either `Molecular Function`, `Biological Process`, or `Cellular Component`.
 - `Probability`: Probability of the prediction.
 - `known_annotation`: `True` if the (protein, GO term) pair is already a `protein_function` edge of that sub-ontology in the input knowledge graph. It always reports the status in the original KG, also when `--mask_existing` is set.
@@ -168,12 +170,18 @@ python predict.py --protein_ids ../../data/example_protein_ids.txt --protein_emb
 - `--output_dir`: Path to the output directory. Default is `../../predictions`.
 - `--threshold`: Probability threshold for keeping a prediction at each level. Default is 0.5.
 - `--top_k`: Keep only top-k candidates per protein per level (0 = keep all above threshold). Default is 0.
+- `--mask_existing`: Optional flag (off by default). Before inference, removes all protein–EC annotation edges of the queried proteins from the input graph, at every level (`protein_ec1`, `protein_ec2`, `protein_ec3`, `protein_ec`) and in both directions (including the `rev_` edge types). The EC class hierarchy edges (`ec_parent_*`) and all other edge types are kept. Masking is applied to the whole query set at once and in memory only; the KG file on disk is not changed.
 
 The output file is a csv file containing the following columns:
-- `Protein`: UniProt ID
+- `UniProt_ID`: UniProt ID
+- `Protein`: Protein name
 - `EC`: Predicted EC number (or class prefix for levels L1–L3).
+- `EC_name`: Enzyme name for complete EC numbers (L4) or class name for L1–L3 (from the ExPASy ENZYME nomenclature).
 - `EC_level`: EC hierarchy level, one of `L1`, `L2`, `L3`, `L4`.
 - `Probability`: Probability of the prediction.
+- `known_annotation`: Whether the prediction is already an annotation of the protein in the input EC knowledge graph. For a complete EC number (L4), `True` if the protein has that EC number as a `protein_ec` edge. For L1–L3, `True` if the predicted class is a prefix of at least one of the protein's known complete EC numbers (e.g. a predicted `3.4.21` is known if the protein is annotated with `3.4.21.5`). The EC KG also stores explicit per-level protein edges (`protein_ec1/2/3`); these are exactly the prefixes of each protein's L4 numbers, so both definitions give the same result. The column always reports the status in the original KG, also when `--mask_existing` is set.
+
+**Known annotations and `--mask_existing`.** By default, the queried proteins' existing EC annotations in the knowledge graph are visible to the model during message passing, so predictions amount to *annotation completion*: known EC numbers typically receive high scores because they are part of the input. Use `known_annotation` to separate them from new candidates. With `--mask_existing`, all EC annotations of the queried proteins are hidden from the model, which simulates prediction for proteins without prior EC annotations. Use this mode for validation. Note that the proteins' GO annotations and sequence-similarity edges remain visible in this mode, and they are often informative of the EC class.
 
 Unlike the independent per-level scoring used for evaluation, `predict.py` runs the model as a top-down cascade: L1 is predicted first, and each deeper level is predicted only among the children of the levels kept above it. This yields hierarchically consistent predictions (every predicted L4 number has its predicted L3/L2/L1 ancestors), which is what you want when applying the model to new proteins; a prediction is kept at each level when its probability exceeds `--threshold`.
 

@@ -3,6 +3,9 @@ import torch
 import argparse
 import pandas as pd
 import yaml
+import gzip
+import json
+from functools import lru_cache
 from datetime import datetime
 from tqdm.auto import tqdm
 
@@ -15,6 +18,25 @@ PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 
 def _root_path(*parts: str) -> str:
     return os.path.join(PROJECT_ROOT, *parts)
+
+# Display names shared with the web service: protein and complete EC number (L4) names come from
+# name_info; EC class/subclass/sub-subclass (L1-L3) names from the ExPASy ENZYME nomenclature.
+NAME_INFO_PATH = _root_path('data', 'name_info.json.gz')
+EC_CLASS_NAMES_PATH = _root_path('data', 'ec_class_names.json')
+
+
+@lru_cache(maxsize=1)
+def load_name_info(name_file=NAME_INFO_PATH):
+    """{node_type: {node_id: display name}}."""
+    with gzip.open(name_file, 'rt', encoding='utf-8') as file:
+        return json.load(file)
+
+
+@lru_cache(maxsize=1)
+def load_ec_class_names(path=EC_CLASS_NAMES_PATH):
+    """{EC class prefix (L1-L3) -> name}, e.g. '2.7.11' -> 'Protein-serine/threonine kinases'."""
+    with open(path, encoding='utf-8') as f:
+        return json.load(f)
 
 MODEL_CONFIG_PATHS = {
     'tape':   _root_path('configs', 'ec', 'prothgt-ec-config.yaml'),
@@ -49,7 +71,76 @@ def parse_args():
     parser.add_argument('--output_dir', type=str, default='../../predictions', help='Path to the output directory')
     parser.add_argument('--threshold', type=float, default=0.5, help='Probability threshold for keeping a prediction at each level')
     parser.add_argument('--top_k', type=int, default=0, help='Keep only top-k candidates per protein per level (0 = keep all above threshold).')
+    parser.add_argument('--mask_existing', action='store_true',
+                        help='Remove all protein-EC annotation edges (every level, both directions) of the queried '
+                             'proteins from the input graph before inference, to simulate prediction without prior EC annotations.')
     return parser.parse_args()
+
+
+LEVEL_DEPTH = {'l1': 1, 'l2': 2, 'l3': 3, 'l4': 4}
+
+
+def _protein_ec_edge_types(heterodata):
+    """All protein-EC annotation edge types (protein_ec1/2/3, protein_ec and their rev_ edges),
+    with the edge_index row that holds the protein. EC hierarchy edges (ec_parent_*) are not included."""
+    edge_types = []
+    for et in heterodata.edge_types:
+        src, rel, dst = et
+        if rel.startswith('protein_ec') or rel.startswith('rev_protein_ec'):
+            if src == 'Protein':
+                edge_types.append((et, 0))
+            elif dst == 'Protein':
+                edge_types.append((et, 1))
+    return edge_types
+
+
+def get_known_ec_annotations(heterodata, protein_ids):
+    """
+    {protein_id: {depth: set of EC prefixes}} from the protein's complete (L4) EC numbers
+    in the input KG (protein_ec edges). depth 4 holds the complete EC numbers; depths 1-3
+    hold their class prefixes (e.g. 3.4.21.5 -> 3, 3.4, 3.4.21). In the EC KG the explicit
+    protein_ec1/2/3 edges are exactly these prefixes, so both definitions coincide.
+    """
+    id_mapping = heterodata['Protein']['id_mapping']
+    protein_indices = torch.tensor([id_mapping[pid] for pid in protein_ids], dtype=torch.long)
+    index_to_pid = {int(id_mapping[pid]): pid for pid in protein_ids}
+    ec_inv = {idx: tok for tok, idx in heterodata['EC_number']['id_mapping'].items()}
+    src, dst = heterodata['Protein', 'protein_ec', 'EC_number'].edge_index
+    selected = torch.isin(src, protein_indices)
+    known = {pid: {depth: set() for depth in (1, 2, 3, 4)} for pid in protein_ids}
+    for s, d in zip(src[selected].tolist(), dst[selected].tolist()):
+        parts = ec_inv[d].split('.')
+        for depth in (1, 2, 3, 4):
+            known[index_to_pid[s]][depth].add('.'.join(parts[:depth]))
+    return known
+
+
+def is_known_ec(known_for_protein, level, token):
+    """True if `token` (EC number or class prefix at `level`) is a known annotation,
+    i.e. it equals one of the protein's complete EC numbers (L4) or is a prefix of one (L1-L3)."""
+    return token in known_for_protein[LEVEL_DEPTH[level]]
+
+
+def mask_protein_ec_annotations(heterodata, protein_ids):
+    """
+    In-memory only (the KG file on disk is not changed): remove all protein-EC edges of the
+    given proteins at every level and in both directions. EC hierarchy edges and all other
+    edge types are kept. Returns {edge_type: number of removed edges}.
+    """
+    id_mapping = heterodata['Protein']['id_mapping']
+    protein_indices = torch.tensor([id_mapping[pid] for pid in protein_ids], dtype=torch.long)
+    removed = {}
+    for edge_type, protein_row in _protein_ec_edge_types(heterodata):
+        store = heterodata[edge_type]
+        num_edges = store.edge_index.size(1)
+        keep = ~torch.isin(store.edge_index[protein_row], protein_indices)
+        for key, value in list(store.items()):
+            if key == 'edge_index':
+                store[key] = value[:, keep]
+            elif torch.is_tensor(value) and value.dim() > 0 and value.size(0) == num_edges:
+                store[key] = value[keep]  # per-edge attributes, if any
+        removed[edge_type] = int((~keep).sum())
+    return removed
 
 
 def load_model_weights(model, model_path: str, device):
@@ -110,7 +201,7 @@ def cascade_predict_protein(model, x_dict, masks, protein_idx, inv_maps, max_lev
 
 def generate_and_save_predictions(protein_ids, heterodata_path, model_path, model_config_path,
                                    max_level, requested_levels, output_dir, prediction_file_path,
-                                   threshold: float = 0.5, top_k: int = 0):
+                                   threshold: float = 0.5, top_k: int = 0, mask_existing: bool = False):
     os.makedirs(output_dir, exist_ok=True)
 
     heterodata = torch.load(heterodata_path)
@@ -138,6 +229,17 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_path, mode
 
     print(f'Processing {len(protein_ids)}/{len(protein_ids) + len(protein_ids_not_found)} proteins')
     print('--------------------------------')
+
+    # Known annotations are always taken from the original (unmasked) KG.
+    known_annotations = get_known_ec_annotations(heterodata, protein_ids)
+
+    # Mask once for the whole query set, before the full-graph forward pass.
+    if mask_existing:
+        removed = mask_protein_ec_annotations(heterodata, protein_ids)
+        print('--mask_existing: removed protein-EC edges of the queried proteins from the input graph (in memory):')
+        for edge_type, n_removed in removed.items():
+            print(f'  {edge_type}: {n_removed}')
+        print('--------------------------------')
 
     # Load the joint model config and weights once (shared across all levels).
     with open(model_config_path, 'r') as file:
@@ -185,7 +287,12 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_path, mode
     }
     id_mapping = heterodata['Protein']['id_mapping']
 
-    all_proteins, all_terms, all_levels, all_probabilities = [], [], [], []
+    name_info = load_name_info()
+    ec_l4_names = name_info['EC_number']        # complete EC number (L4) -> enzyme name
+    ec_class_names = load_ec_class_names()      # L1-L3 class prefix -> class name
+
+    all_proteins, all_terms, all_levels, all_probabilities, all_known = [], [], [], [], []
+    all_protein_names, all_ec_names = [], []
     for protein_id in tqdm(protein_ids, desc='Proteins'):
         rows = cascade_predict_protein(
             model, x_dict, masks, id_mapping[protein_id], inv_maps, max_level,
@@ -194,15 +301,22 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_path, mode
             if level not in requested_levels:
                 continue
             all_proteins.append(protein_id)
+            all_protein_names.append(name_info['Protein'].get(protein_id, protein_id))
             all_terms.append(token)
+            all_ec_names.append(ec_l4_names.get(token, '') if level == 'l4' else ec_class_names.get(token, ''))
             all_levels.append(LEVEL_LABEL[level])
             all_probabilities.append(prob)
+            all_known.append(is_known_ec(known_annotations[protein_id], level, token))
 
+    # Same columns and content as the ProtHGT web service.
     final_df = pd.DataFrame({
-        'Protein': all_proteins,
+        'UniProt_ID': all_proteins,
+        'Protein': all_protein_names,
         'EC': all_terms,
+        'EC_name': all_ec_names,
         'EC_level': all_levels,
         'Probability': all_probabilities,
+        'known_annotation': all_known,
     })
     final_df.to_csv(prediction_file_path, index=False, float_format="%.3f")
     print(f'Predictions saved to {prediction_file_path}')
@@ -243,6 +357,7 @@ def main():
         prediction_file_path,
         threshold=args.threshold,
         top_k=args.top_k,
+        mask_existing=args.mask_existing,
     )
 
 
