@@ -120,8 +120,8 @@ python predict.py --protein_ids ../data/example_protein_ids.txt --protein_embedd
 - `--mask_existing`: Optional flag (off by default). Before inference, removes every GO annotation edge (`protein_function` and `rev_protein_function`) of the queried proteins from the input graph, for all three sub-ontologies regardless of `--go_category`. All other edge types are kept. Masking is applied to the whole query set at once, so results do not depend on `--batch_size`, and it is done in memory only; the KG file on disk is not changed.
 
 The output file is a csv file containing the following columns:
-- `Protein`: UniProt ID
 - `UniProt_ID`: UniProt ID
+- `Protein`: Protein name
 - `GO_ID`: GO term ID
 - `GO_term`: GO term name
 - `GO_category`: GO term category. Either `Molecular Function`, `Biological Process`, or `Cellular Component`.
