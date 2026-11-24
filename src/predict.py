@@ -67,7 +67,54 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=100, help='Number of proteins to process in each batch')
     parser.add_argument('--threshold', type=float, default=0.0, help='Threshold for filtering predictions')
     parser.add_argument('--top_k', type=int, default=0, help='Keep only top-k GO terms per protein (0 = keep all).')
+    parser.add_argument('--mask_existing', action='store_true',
+                        help='Remove all GO annotation edges (all three sub-ontologies) of the queried proteins '
+                             'from the input graph before inference, to simulate prediction without prior GO annotations.')
     return parser.parse_args()
+
+GO_TERM_TYPES = ['GO_term_F', 'GO_term_P', 'GO_term_C']
+
+def get_known_annotations(heterodata, protein_ids, go_category):
+    """
+    Return {protein_id: set of GO term indices} for the protein_function edges of the
+    given proteins in the input KG, for one sub-ontology.
+    """
+    id_mapping = heterodata['Protein']['id_mapping']
+    protein_indices = torch.tensor([id_mapping[pid] for pid in protein_ids], dtype=torch.long)
+    index_to_pid = {int(id_mapping[pid]): pid for pid in protein_ids}
+    src, dst = heterodata['Protein', 'protein_function', go_category].edge_index
+    selected = torch.isin(src, protein_indices)
+    known = {pid: set() for pid in protein_ids}
+    for s, d in zip(src[selected].tolist(), dst[selected].tolist()):
+        known[index_to_pid[s]].add(d)
+    return known
+
+def mask_protein_annotations(heterodata, protein_ids):
+    """
+    In-memory only (the KG file on disk is not changed): remove every protein_function edge
+    and its reverse (rev_protein_function) that involves any of the given proteins, for all
+    three GO sub-ontologies. All other edge types are kept.
+    Returns {edge_type: number of removed edges}.
+    """
+    id_mapping = heterodata['Protein']['id_mapping']
+    protein_indices = torch.tensor([id_mapping[pid] for pid in protein_ids], dtype=torch.long)
+    removed = {}
+    for go_type in GO_TERM_TYPES:
+        # (edge type, row of edge_index that holds the protein)
+        for edge_type, protein_row in [(('Protein', 'protein_function', go_type), 0),
+                                       ((go_type, 'rev_protein_function', 'Protein'), 1)]:
+            if edge_type not in heterodata.edge_types:
+                continue
+            store = heterodata[edge_type]
+            num_edges = store.edge_index.size(1)
+            keep = ~torch.isin(store.edge_index[protein_row], protein_indices)
+            for key, value in list(store.items()):
+                if key == 'edge_index':
+                    store[key] = value[:, keep]
+                elif torch.is_tensor(value) and value.dim() > 0 and value.size(0) == num_edges:
+                    store[key] = value[keep]  # per-edge attributes, if any
+            removed[edge_type] = int((~keep).sum())
+    return removed
 
 def load_data(heterodata, protein_ids, go_category):
 
@@ -116,8 +163,14 @@ def load_model_weights(model, model_path: str, device):
     model.load_state_dict(state, strict=True)
     return model
 
-def create_prediction_df(predictions, heterodata, protein_ids, go_category, threshold: float = 0.0, top_k: int = 0):
-        
+def create_prediction_df(predictions, heterodata, protein_ids, go_category, threshold: float = 0.0, top_k: int = 0,
+                         known_annotations=None):
+    """
+    known_annotations: {protein_id: set of GO term indices} annotated in the input KG
+    (from get_known_annotations); used to fill the `known_annotation` column.
+    """
+    if known_annotations is None:
+        known_annotations = get_known_annotations(heterodata, protein_ids, go_category)
 
     go_category_dict = {
         'GO_term_F': 'Molecular Function',
@@ -132,7 +185,8 @@ def create_prediction_df(predictions, heterodata, protein_ids, go_category, thre
     all_go_terms = []
     all_categories = []
     all_probabilities = []
-    
+    all_known = []
+
     go_terms = [None] * n_go_terms
     for go_id, idx in id_mapping.items():
         go_terms[int(idx)] = go_id
@@ -169,17 +223,20 @@ def create_prediction_df(predictions, heterodata, protein_ids, go_category, thre
         all_go_terms.extend([go_terms[int(j)] for j in keep_idx.tolist()])
         all_categories.extend([go_category_dict[go_category]] * k)
         all_probabilities.extend(protein_predictions.tolist())
-    
+        known_terms = known_annotations.get(protein_id, set())
+        all_known.extend([int(j) in known_terms for j in keep_idx.tolist()])
+
     prediction_df = pd.DataFrame({
         'Protein': all_proteins,
         'GO_term': all_go_terms,
         'GO_category': all_categories,
-        'Probability': all_probabilities
+        'Probability': all_probabilities,
+        'known_annotation': all_known,
     })
     
     return prediction_df
 
-def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, model_config_paths, go_category, output_dir, prediction_file_path, batch_size=100, threshold: float = 0.0, top_k: int = 0):
+def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, model_config_paths, go_category, output_dir, prediction_file_path, batch_size=100, threshold: float = 0.0, top_k: int = 0, mask_existing: bool = False):
     
     os.makedirs(output_dir, exist_ok=True)
 
@@ -227,6 +284,17 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    # Known annotations are always taken from the original (unmasked) KG.
+    known_annotations = {go_cat: get_known_annotations(heterodata, protein_ids, go_cat) for go_cat in go_category}
+
+    # Mask once for the whole query set (independent of batch size), before any forward pass.
+    if mask_existing:
+        removed = mask_protein_annotations(heterodata, protein_ids)
+        print('--mask_existing: removed GO annotation edges of the queried proteins from the input graph (in memory):')
+        for edge_type, n_removed in removed.items():
+            print(f'  {edge_type}: {n_removed}')
+        print('--------------------------------')
+
     all_predictions_dfs = []
 
     for go_cat, model_config_path, model_path in zip(go_category, model_config_paths, model_paths):
@@ -263,7 +331,8 @@ def generate_and_save_predictions(protein_ids, heterodata_path, model_paths, mod
 
             # Generate predictions for batch
             predictions = generate_predictions(heterodata, model, edge_label_index, go_cat)
-            prediction_df = create_prediction_df(predictions, heterodata, batch_proteins, go_cat, threshold=threshold, top_k=top_k)
+            prediction_df = create_prediction_df(predictions, heterodata, batch_proteins, go_cat, threshold=threshold, top_k=top_k,
+                                                 known_annotations=known_annotations[go_cat])
             category_predictions.append(prediction_df)
             
             # Clean up batch memory
@@ -329,6 +398,7 @@ def main():
         args.batch_size,
         threshold=args.threshold,
         top_k=args.top_k,
+        mask_existing=args.mask_existing,
     )
 
 if __name__ == '__main__':

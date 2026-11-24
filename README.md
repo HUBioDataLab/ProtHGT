@@ -117,12 +117,16 @@ python predict.py --protein_ids ../data/example_protein_ids.txt --protein_embedd
 - `--batch_size`: Number of proteins to process in each batch. Default is 100.
 - `--threshold`: Threshold for filtering predictions. Default is 0.0.
 - `--top_k`: Keep only top-k GO terms per protein (0 = keep all). Default is 0.
+- `--mask_existing`: Optional flag (off by default). Before inference, removes every GO annotation edge (`protein_function` and `rev_protein_function`) of the queried proteins from the input graph, for all three sub-ontologies regardless of `--go_category`. All other edge types are kept. Masking is applied to the whole query set at once, so results do not depend on `--batch_size`, and it is done in memory only; the KG file on disk is not changed.
 
 The output file is a csv file containing the following columns:
 - `Protein`: UniProt ID
 - `GO_term`: GO term ID
 - `GO_category`: GO term category. Either `Molecular Function`, `Biological Process`, or `Cellular Component`.
 - `Probability`: Probability of the prediction.
+- `known_annotation`: `True` if the (protein, GO term) pair is already a `protein_function` edge of that sub-ontology in the input knowledge graph. It always reports the status in the original KG, also when `--mask_existing` is set.
+
+**Known annotations and `--mask_existing`.** By default, the queried proteins' existing GO annotations in the knowledge graph are visible to the model during message passing, so predictions amount to *annotation completion*: known terms typically receive high scores because they are part of the input. Use `known_annotation` to separate them from new candidate terms. With `--mask_existing`, all GO annotations of the queried proteins are hidden from the model, which simulates prediction for proteins without prior GO annotations. Use this mode for validation, for example to check whether known annotations are recovered from the remaining (non-GO) relations.
 
 **Note:** Currently, ProtHGT can only generate predictions for proteins that exist in our knowledge graph, which includes over 300,000 UniProtKB/Swiss-Prot proteins. To enable predictions for novel proteins from their sequences, we are developing a real-time data retrieval system that dynamically fetches relational data from external sources (e.g., STRING, Reactome) and constructs a customized knowledge graph for inference. This system will allow ProtHGT to predict functions for previously unseen proteins by integrating newly acquired biological relationships.
 
